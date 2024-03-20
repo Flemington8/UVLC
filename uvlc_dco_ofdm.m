@@ -29,12 +29,44 @@ qamModOutmat(numFFTbins / 2 + 2:numFFTbins,:) = conj(flipud(qamModOutmat(2:numFF
 ifftOut = ifft(qamModOutmat,numFFTbins,1);
 
 % Add cyclic prefix
-txSig = [ifftOut(end - cycPrefLen + 1:end,:);ifftOut];
+cycPrefOut = [ifftOut(end - cycPrefLen + 1:end,:);ifftOut];
 
 % Calculate DC bias
 bdc = 7;
-clip = sqrt((10 .^ (bdc / 10)) - 1);
-bdcc = clip *sqrt(txSig .* txSig);
-dcBias = txSig + bdcc;
+clip = sqrt((10 .^ (bdc / 10)) - 1); % clipping factor k
+bdcc = clip *sqrt(cycPrefOut .* cycPrefOut); % Computation of DC bias
+dcBiasOut = cycPrefOut + bdcc; %Addition of DC bias to the cyclic prefix added signal
+
+count =0;
+snrvec =0:1:50; %size of signal to noise ratio (SNR) vector
+for snr=snr_vector
+    SNR = snr + 10*log10(log2(M));
+    count = count + 1;
+    
+    txSig = reshape(dcBiasOut,[],1); % Parallel to serial conversion
+    
+    %Channel of DCO-OFDM
+    chanOut = awgn(txSig,SNR,'measured'); % Add white Gaussian noise to the signal
+    
+    %Receiver of DCO -OFDM
+    
+    % Removal of DC bias
+    removalBiasOut = chanOut - bdcc;
+    
+    % Removal of cyclic prefix
+    removalCycPrefOut = removalBiasOut(cycPrefLen + 1:end,:);
+    
+    % Serial to parallel conversion
+    removalCycPrefOutmat = reshape(removalCycPrefOut,[],numSym);
+    
+    % Perform FFT
+    fftOut = fft(removalCycPrefOut,numFFTbins,1);
+    
+    % Demapping the 16-QAM symbols
+    demodOut = qamdemod(fftOut,modOrder,"OutputType","bit","UnitAveragePower",true);
+end
+
+
+
 
 
